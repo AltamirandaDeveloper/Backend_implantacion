@@ -9,8 +9,16 @@ require("dotenv").config()
 
 const app = express()
 
-// Configuración de CORS
-app.use(cors({ origin: "http://localhost:3000", credentials: true }))
+// ==========================================
+// CONFIGURACIÓN DE CORS CORREGIDA
+// ==========================================
+app.use(cors({ 
+  origin: true, // Permite cualquier origen (localhost o URL de producción)
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}))
+
 app.use(express.json())
 
 // Configuración de Cloudinary
@@ -32,31 +40,28 @@ const storage = multer.diskStorage({
     cb(null, uniqueName)
   },
 })
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }) // Limite 50MB
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } })
 
 // Endpoint para subir archivos
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No se recibió ningún archivo" })
 
-    // Determinar el tipo de archivo
-    let resourceType = req.file.mimetype.includes("pdf") ? "raw" : "auto"  // raw para PDF
+    let resourceType = req.file.mimetype.includes("pdf") ? "raw" : "auto"
 
-    // Subir el archivo a Cloudinary
     const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: resourceType,  // "raw" para PDFs
-      folder: "contenidos_ingles",   // El folder donde se guardarán los archivos
-      public_id: path.parse(req.file.originalname).name,  // Usamos el nombre original
+      resource_type: resourceType,
+      folder: "contenidos_ingles",
+      public_id: path.parse(req.file.originalname).name,
       overwrite: false,
-      type: "upload",  // Hacerlo público
+      type: "upload",
     })
 
-    // Limpiar archivo temporal
-    fs.unlinkSync(req.file.path)
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
 
     res.json({
       success: true,
-      url: result.secure_url,  // URL pública del archivo
+      url: result.secure_url,
       nombre: req.file.originalname,
       tipo: result.resource_type,
       mime: req.file.mimetype,
@@ -64,22 +69,18 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       size: result.bytes,
     })
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)  // Limpiar archivo si hubo error
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
     console.error(error)
     res.status(500).json({ error: "Error subiendo archivo", detalles: error.message })
   }
 })
 
-// Endpoint para descargar PDF con proxy
+// Endpoint para descargar PDF
 app.get("/download", async (req, res) => {
   try {
     const { url } = req.query
     if (!url) return res.status(400).send("Falta la URL del archivo")
-
-    // Extraer el nombre del archivo para la descarga
     const fileName = url.split("/").pop().split("?")[0] || "archivo.pdf"
-
-    // Hacer el request al archivo (proxy)
     const response = await axios.get(url, { responseType: "stream" })
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`)
     response.data.pipe(res)
@@ -89,8 +90,7 @@ app.get("/download", async (req, res) => {
   }
 })
 
-// Test endpoint para verificar funcionamiento
 app.get("/test", (req, res) => res.json({ mensaje: "Backend funcionando ✅", timestamp: new Date().toISOString() }))
 
-const PORT = process.env.PORT || 4000; // Render usará process.env.PORT
+const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Backend activo en el puerto ${PORT}`));
